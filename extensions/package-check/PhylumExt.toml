@@ -1,0 +1,4 @@
+name = "package-check"
+description = "Description here"
+entry_point = "main.ts"
+permissions = ["read-pwd"]
