@@ -239,6 +239,33 @@ fn parse_lockfile(lockfile: &str, lockfile_type: &str) -> Result<Vec<PackageDesc
     parser.parse_file(Path::new(lockfile))
 }
 
+#[op]
+async fn submit_request(
+    state: Rc<RefCell<OpState>>,
+    packages: Vec<PackageDescriptor>,
+) -> Result<String> {
+    let mut state = Pin::new(state.borrow_mut());
+    let api = ExtensionState::borrow_from(&mut state).await?;
+
+    let (project_id, group_name) = if let Some(p) = get_current_project() {
+        (p.id, p.group_name)
+    } else {
+        return Err(anyhow!("Failed to find a valid project configuration"));
+    };
+
+    api.submit_request(
+        &api.config().request_type,
+        &packages,
+        false,
+        project_id,
+        None,
+        group_name,
+    )
+    .await
+    .map(|job_id| job_id.to_string())
+    .map_err(|e| e.into())
+}
+
 pub(crate) fn api_decls() -> Vec<OpDecl> {
     vec![
         analyze::decl(),
@@ -249,5 +276,6 @@ pub(crate) fn api_decls() -> Vec<OpDecl> {
         get_project_details::decl(),
         analyze_package::decl(),
         parse_lockfile::decl(),
+        submit_request::decl(),
     ]
 }
