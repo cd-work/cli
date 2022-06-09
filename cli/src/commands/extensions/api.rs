@@ -1,26 +1,16 @@
-//! TODO remove the following annotation before merging. The functions in
-//! this module should have as unique client the Deno runtime; pending its
-//! implementation, having these functions unused would break CI.
-#![allow(unused)]
-
-use std::cell::{RefCell, RefMut};
-use std::future::Future;
+use std::cell::RefCell;
 use std::path::Path;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::str::FromStr;
-use std::sync::Arc;
 
 use crate::commands::parse::{get_packages_from_lockfile, LOCKFILE_PARSERS};
-use crate::config::{get_current_project, Config};
-use crate::lockfiles::Parse;
+use crate::config::get_current_project;
 use crate::{api::PhylumApi, auth::UserInfo};
 
 use anyhow::{anyhow, Context, Error, Result};
-use deno_core::parking_lot::{MappedMutexGuard, Mutex, MutexGuard};
 use deno_core::{op, OpDecl, OpState};
 use futures::future::BoxFuture;
-use once_cell::sync::Lazy;
 use phylum_types::types::auth::{AccessToken, RefreshToken};
 use phylum_types::types::common::{JobId, ProjectId};
 use phylum_types::types::job::JobStatusResponse;
@@ -30,27 +20,26 @@ use phylum_types::types::package::{
 use phylum_types::types::project::ProjectDetailsResponse;
 
 /// Holds either an unawaited, boxed `Future`, or the result of awaiting the future.
-/// In other words, it is a lazy evaluator for the `Future`.
 pub(crate) enum OnceFuture<T: Unpin> {
     Future(BoxFuture<'static, T>),
     Awaited(T),
 }
 
 impl<T: Unpin> OnceFuture<T> {
-    fn new(t: BoxFuture<'static, T>) -> Self {
-        OnceFuture::Future(t)
+    fn new(inner: BoxFuture<'static, T>) -> Self {
+        OnceFuture::Future(inner)
     }
 
     async fn get(&mut self) -> &T {
         match *self {
-            OnceFuture::Future(ref mut t) => {
-                *self = OnceFuture::Awaited(t.await);
+            OnceFuture::Future(ref mut inner) => {
+                *self = OnceFuture::Awaited(inner.await);
                 match *self {
                     OnceFuture::Future(..) => unreachable!(),
-                    OnceFuture::Awaited(ref mut t) => t,
+                    OnceFuture::Awaited(ref mut inner) => inner,
                 }
             }
-            OnceFuture::Awaited(ref mut t) => t,
+            OnceFuture::Awaited(ref mut inner) => inner,
         }
     }
 }
@@ -84,6 +73,17 @@ impl From<BoxFuture<'static, Result<PhylumApi>>> for ExtensionState {
 // These functions need not be public, as Deno's declarations (`::decl()`) cloak
 // them in a data structure that is consumed by the runtime extension builder.
 //
+// The general pattern for accessing state in extensions API functions is:
+// - borrow from Deno's state handler
+// - pin the borrowed reference guard
+// - extract `Result<&PhylumApi>` from ExtensionState
+//
+// The borrow is necessary as Deno's state is held inside of a `RefCell`. The resulting mutable
+// reference is going to be held across an await point, which means it should be pinned to prevent
+// it being moved, because that would result in an invalid reference. The extracted
+// `Result<&PhylumApi>` reference lives as long as the pinned `RefMut` and can be used until both
+// go out of scope and the guard is released.
+//
 
 /// Analyze a lockfile.
 /// Equivalent to `phylum analyze`.
@@ -94,10 +94,6 @@ async fn analyze(
     project: Option<&str>,
     group: Option<&str>,
 ) -> Result<ProjectId> {
-    // The general pattern for accessing state in extensions API functions is:
-    // - borrow from Deno's state handler
-    // - pin the borrowed reference guard
-    // - extract `Result<&PhylumApi>` from ExtensionState
     let mut state = Pin::new(state.borrow_mut());
     let api = ExtensionState::borrow_from(&mut state).await?;
 
