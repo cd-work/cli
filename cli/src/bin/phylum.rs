@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
 use anyhow::{anyhow, Context, Result};
-use clap::ArgMatches;
+use clap::{ArgMatches, Command};
 use env_logger::Env;
 use log::*;
 use phylum_cli::commands::parse::handle_parse;
@@ -75,14 +75,11 @@ async fn api_factory(
     Ok(api)
 }
 
-async fn handle_commands() -> CommandResult {
+async fn handle_commands<'a>(app: Command<'a>) -> CommandResult {
     //
     // Initialize clap app and read configuration.
     //
 
-    let app = phylum_cli::app::app()
-        .arg_required_else_help(true)
-        .subcommand_required(true);
     let app_name = app.get_name().to_string();
     // Required for printing help messages since `get_matches()` consumes `App`
     let app_helper = &mut app.clone();
@@ -228,7 +225,11 @@ fn handle_version(app_name: &str, ver: &str) -> CommandResult {
 async fn main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
 
-    match handle_commands().await {
+    let app = phylum_cli::app::app()
+        .arg_required_else_help(true)
+        .subcommand_required(true);
+
+    match handle_commands(app).await {
         Ok(CommandValue::Action(action)) => match action {
             Action::None => ExitCode::Ok.exit(),
             Action::Warn => exit_warn("Project failed threshold requirements!"),
