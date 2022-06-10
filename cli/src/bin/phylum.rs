@@ -221,8 +221,7 @@ fn handle_version(app_name: &str, ver: &str) -> CommandResult {
     Ok(ExitCode::Ok.into())
 }
 
-#[tokio::main]
-async fn main() {
+async fn async_main() {
     env_logger::Builder::from_env(Env::default().default_filter_or("warn")).init();
 
     let app = phylum_cli::app::app()
@@ -241,4 +240,13 @@ async fn main() {
         Ok(CommandValue::Code(code)) => code.exit(),
         Err(error) => exit_error(error.into(), "Execution failed"),
     }
+}
+
+fn main() {
+    tokio::runtime::Builder::new_multi_thread()
+        .thread_stack_size(4 * 1024 * 1024)
+        .enable_all()
+        .build()
+        .unwrap()
+        .block_on(async_main())
 }
