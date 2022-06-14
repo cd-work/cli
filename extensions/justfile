@@ -1,0 +1,21 @@
+#!/usr/bin/env just --justfile
+# cargo install just
+
+toplevel := `git rev-parse --show-toplevel`
+cli_exe := toplevel + "/target/release/phylum"
+extension_path := toplevel + "/extensions/"
+tmp_dir := `mktemp -d /tmp/phylum-ext.XXXXXXXXXX`
+
+export XDG_DATA_HOME := tmp_dir
+
+_build:
+  cd {{ toplevel }} && cargo build --release --features extensions
+
+_cleanup:
+  rm -fr {{ tmp_dir }}
+
+set positional-arguments
+
+@run extension: _build && _cleanup
+  {{ cli_exe }} extension add {{ extension_path }}$1
+  {{ cli_exe }} $1

@@ -1,4 +1,4 @@
-name = "package-check"
+name = "hash-check"
 description = "Description here"
 entry_point = "main.ts"
 permissions = ["read-pwd"]
