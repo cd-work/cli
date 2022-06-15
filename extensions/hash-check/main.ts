@@ -28,7 +28,7 @@
 // let r = await Deno.core.opAsync("submit_request", packages)
 // Deno.core.print(r)
 
-import { walk } from "https://deno.land/std@0.143.0/fs/mod.ts"
+import { walk, WalkEntry } from "https://deno.land/std@0.143.0/fs/mod.ts"
 import { crypto } from "https://deno.land/std@0.143.0/crypto/mod.ts"
 import { encode } from "https://deno.land/std@0.143.0/encoding/hex.ts"
 
@@ -38,9 +38,30 @@ async function hashFile(path: string): Promise<string> {
   return new TextDecoder().decode(encode(new Uint8Array(digest)))
 }
 
-for await (const entry of walk(".")) {
-  if (!entry.isDirectory) {
+async function* getHashes(path: string) {
+  for await (const entry of walk(path)) {
+    if (entry.isDirectory) {
+      continue
+    }
     let hash = await hashFile(entry.path)
-    console.log(`${entry.path}: ${hash}`)
+    yield [entry.path, hash]
   }
 }
+
+const enum PackageType {
+  JavaScript,
+  Python,
+  Csharp,
+}
+
+function detectPackageType(): PackageType | null {
+  return null
+}
+
+// let hashes = []
+// 
+// for await (const [path, hash] of getHashes("./cli/src")) {
+//   hashes.push([path, hash])
+// }
+// 
+// console.log(hashes)
