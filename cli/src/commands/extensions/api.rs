@@ -211,7 +211,7 @@ async fn get_project_details(
 /// Analyze a single package.
 /// Equivalent to `phylum package`.
 #[op]
-async fn analyze_package(
+async fn get_package_details(
     state: Rc<RefCell<OpState>>,
     name: &str,
     version: &str,
@@ -239,34 +239,8 @@ fn parse_lockfile(lockfile: &str, lockfile_type: &str) -> Result<Vec<PackageDesc
         .find_map(|(name, parser)| (*name == lockfile_type).then(|| *parser))
         .ok_or_else(|| anyhow!("Unrecognized lockfile type: `{lockfile_type}`"))?;
 
-    parser.parse_file(Path::new(lockfile))
-}
-
-#[op]
-async fn submit_request(
-    state: Rc<RefCell<OpState>>,
-    packages: Vec<PackageDescriptor>,
-) -> Result<String> {
-    let mut state = Pin::new(state.borrow_mut());
-    let api = ExtensionState::borrow_from(&mut state).await?;
-
-    let (project_id, group_name) = if let Some(p) = get_current_project() {
-        (p.id, p.group_name)
-    } else {
-        return Err(anyhow!("Failed to find a valid project configuration"));
-    };
-
-    api.submit_request(
-        &api.config().request_type,
-        &packages,
-        false,
-        project_id,
-        None,
-        group_name,
-    )
-    .await
-    .map(|job_id| job_id.to_string())
-    .map_err(|e| e.into())
+    let lockfile_data = std::fs::read_to_string(Path::new(lockfile))?;
+    parser.parse(&lockfile_data)
 }
 
 pub(crate) fn api_decls() -> Vec<OpDecl> {
@@ -277,8 +251,7 @@ pub(crate) fn api_decls() -> Vec<OpDecl> {
         get_refresh_token::decl(),
         get_job_status::decl(),
         get_project_details::decl(),
-        analyze_package::decl(),
+        get_package_details::decl(),
         parse_lockfile::decl(),
-        submit_request::decl(),
     ]
 }
